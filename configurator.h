@@ -3,10 +3,12 @@
 
 #include "tree.h"
 
+#define MAX_ADDRLEN 15
+
 struct config
 {
-	char* _masterdns;
-	char* _blacklistresponse;
+	char _masterdns[MAX_ADDRLEN];
+	char _blacklistresponse[MAX_ADDRLEN];
 	tree* _blacklist;
 	int _status;
 };

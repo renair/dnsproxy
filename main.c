@@ -23,6 +23,10 @@ int main(int argc, char** argv)
 		printf("Configuration error. Code: %d\n", configuration._status);
 		exit(1);
 	}
+	printf("Master dns: %s\n",configuration._masterdns);
+	printf("Blacklist response: %s\n", configuration._blacklistresponse);
+	printf("Blacklist:\n");
+	print_tree(configuration._blacklist);
 	//creating sockets
 	struct sockaddr_in bind_addr;
 	struct sockaddr_in client_addr;
@@ -55,6 +59,7 @@ int main(int argc, char** argv)
 		printf("Clint's data length: %d\n", data_len);
 		char addr[50];
 		int addr_len = 0;
+		//reading address
 		for(int i = 13; i < data_len && addr_len < 50;++i)
 		{
 			if(buff[i] == 0)
@@ -64,21 +69,20 @@ int main(int argc, char** argv)
 			}
 			if(buff[i] < 15)
 			{
-			addr[addr_len++] = '.';
+				addr[addr_len++] = '.';
 				continue;
 			}
 			addr[addr_len++] = buff[i];
 		}
 		if(is_exist(configuration._blacklist, addr))
 		{
-			printf("%s is blocked!\n",addr);
+			printf("%s is blocked!\n\n",addr);
 			continue;
 		}
 		else
 		{
 			printf("%s is allowed\n",addr);
 		}
-		printf("\n");
 		//connect to server and send client's query
 		int google = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 		if(google == -1)
@@ -89,7 +93,7 @@ int main(int argc, char** argv)
 		struct sockaddr_in google_addr;
 		google_addr.sin_family = AF_INET;
 		google_addr.sin_port = htons(PORT);
-		if(inet_aton("8.8.8.8", &google_addr.sin_addr) == 0)
+		if(inet_aton(configuration._masterdns, &google_addr.sin_addr) == 0)
 		{
 			printf("Cant transfer addres to long.\n");
 			close(google);
@@ -99,6 +103,12 @@ int main(int argc, char** argv)
 		printf("Data sent to master DNS.\n");
 		data_len = recv(google, buff, BUFFLEN, 0);
 		printf("Master DNS response length: %d\n", data_len);
+//test field
+
+
+
+
+//end test field
 		close(google);
 		//send response to client
 		int sent_bytes = sendto(sock, buff, data_len, 0, (struct sockaddr*)&client_addr, client_len);
