@@ -6,11 +6,24 @@
 #include<arpa/inet.h>
 #include<sys/socket.h>
 
+#include "configurator.h"
+
 #define BUFFLEN 512
 #define PORT 53
 
+
+
 int main(int argc, char** argv)
 {
+	//loading configuration
+	struct config configuration;
+	load_config("dns.conf", &configuration);
+	if(configuration._status != 0)
+	{
+		printf("Configuration error. Code: %d\n", configuration._status);
+		exit(1);
+	}
+	//creating sockets
 	struct sockaddr_in bind_addr;
 	struct sockaddr_in client_addr;
 	int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -27,33 +40,46 @@ int main(int argc, char** argv)
 	if(bind(sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
 	{
 		printf("Can't bind socket to %d port.\n",PORT);
+		exit(1);
 	}
 	char buff[BUFFLEN];
 	memset(buff, 0, BUFFLEN);
 	while(1)
 	{
 		int data_len = 0;
-		int client_len = 16;
+		int client_len = sizeof(struct sockaddr);
 		if(!(data_len = recvfrom(sock, buff, BUFFLEN, 0, (struct sockaddr*)&client_addr, &client_len)))
 		{
 			printf("Error in recvfrom.\n");
 		}
-		printf("Data length: %d\n", data_len);
-		for(int i = 12; i < data_len;++i)
+		printf("Clint's data length: %d\n", data_len);
+		char addr[50];
+		int addr_len = 0;
+		for(int i = 13; i < data_len && addr_len < 50;++i)
 		{
 			if(buff[i] == 0)
 			{
+				addr[addr_len] = 0;
 				break;
 			}
 			if(buff[i] < 15)
 			{
-				printf(".");
+			addr[addr_len++] = '.';
 				continue;
 			}
-			printf("%c",buff[i]);
+			addr[addr_len++] = buff[i];
+		}
+		if(is_exist(configuration._blacklist, addr))
+		{
+			printf("%s is blocked!\n",addr);
+			continue;
+		}
+		else
+		{
+			printf("%s is allowed\n",addr);
 		}
 		printf("\n");
-		//connect to google and send query there
+		//connect to server and send client's query
 		int google = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 		if(google == -1)
 		{
@@ -70,12 +96,11 @@ int main(int argc, char** argv)
 			continue;
 		}
 		sendto(google, buff, data_len, 0, (struct sockaddr*)&google_addr, sizeof(google_addr));
-		printf("Data sent to google.\n");
+		printf("Data sent to master DNS.\n");
 		data_len = recv(google, buff, BUFFLEN, 0);
-		printf("Google response: %d\n", data_len);
+		printf("Master DNS response length: %d\n", data_len);
 		close(google);
 		//send response to client
-		//TODO client_len == 16 and it's not right, what to do
 		int sent_bytes = sendto(sock, buff, data_len, 0, (struct sockaddr*)&client_addr, client_len);
 		if(data_len == sent_bytes)
 		{
