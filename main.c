@@ -11,6 +11,7 @@
 #include<errno.h>
 #include<arpa/inet.h>
 #include<sys/socket.h>
+#include<sys/time.h>
 
 #include "configurator.h"
 
@@ -30,7 +31,15 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 	printf("Master dns: %s\n",configuration._masterdns);
-	printf("Blacklist response: %s\n", configuration._blacklistresponse[0] == 0 ? "noaddr" : configuration._blacklistresponse);
+	if(configuration._blacklistresponse[0] == '\0')
+	{
+		printf("Blacklist response: noaddr\n");
+	}
+	else
+	{
+		printf("Blacklist response: %d.%d.%d.%d\n",configuration._blacklistresponse[0], configuration._blacklistresponse[1], configuration._blacklistresponse[2], configuration._blacklistresponse[3]);
+	}
+	//printf("Blacklist response: %s\n", configuration._blacklistresponse[0] == 0 ? "noaddr" : configuration._blacklistresponse);
 	printf("Blacklist:\n");
 	print_tree(configuration._blacklist);
 	//creating server socket
@@ -63,6 +72,12 @@ int main(int argc, char** argv)
 			printf("Error in recvfrom.\n");
 		}
 		printf("Clint's data length: %d\n", data_len);
+//test field
+//		for(int i = 0; i < data_len;++i)
+//		{
+//			printf("%02x ", buff[i]);
+//		}
+//end test field
 		char addr[50];
 		int addr_len = 0;
 		//reading address
@@ -108,13 +123,15 @@ int main(int argc, char** argv)
 				fake_response[7] = 1;   //set amount of answers to 1
 				fake_response[9] = 0;	//set amount of authority records to 0
 				fake_response[11] = 0;	//set amount of additional records to 0
-				fake_response[fake_len-5] = 4; //set length of response data
+				fake_response[fake_len-13] = 1;	//set response of A record
+				fake_response[fake_len-8] = 2;	//set ttl
+				fake_response[fake_len-5] = 4;	//set length of response data
 //test field
-				for(int i = 0; i < fake_len;++i)
-				{
-					printf("%02x ",fake_response[i]);
-				}
-				printf("\n");
+//				for(int i = 0; i < fake_len;++i)
+//				{
+//					printf("%02x ",fake_response[i]);
+//				}
+//				printf("\n");
 //end test field
 				int sent_len = sendto(sock, fake_response, fake_len, 0, (struct sockaddr*)&client_addr, client_len);
 				printf("Sent bytes for fake addr: %d\n\n",sent_len);
@@ -164,6 +181,13 @@ int get_server_response(const char* master, unsigned char* buff, int* data_len)
 {
 	//connect to server and send client's query
 	int google = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 500*1000; //set timeout to 500 ms
+	if(setsockopt(google, SOL_SOCKET, SO_RCVTIMEO,&timeout,sizeof(timeout)) < 0)
+	{
+		printf("Can't configure socket timeout!\n");
+	}
 	if(google == -1)
 	{
 		printf("Can't create connection to connect to master DNS.\n");
@@ -178,19 +202,6 @@ int get_server_response(const char* master, unsigned char* buff, int* data_len)
 		close(google);
 		return 0;
 	}
-//test field
-//	printf("Data from client:\n");
-//	for(int i = 0; i < *data_len;++i)
-//	{
-//		if(buff[i] > 32 && buff[i] < 127)
-//		{
-//			printf("%4c ",buff[i]);
-//			continue;
-//		}
-//		printf("%4d ", buff[i]);
-//	}
-//	printf("\n");
-//end test field
 	sendto(google, buff, *data_len, 0, (struct sockaddr*)&google_addr, sizeof(google_addr));
 	printf("Data sent to master DNS.\n");
 	*data_len = recv(google, buff, BUFFLEN, 0);
