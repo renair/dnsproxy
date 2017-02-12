@@ -76,7 +76,6 @@ void print_tree(tree* node)
 {
 	if(node != 0)
 	{
-//		char ip[15];
 		printf("%s\n",node->_addr);
 		print_tree(node->_left);
 		print_tree(node->_right);

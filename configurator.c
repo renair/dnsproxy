@@ -8,8 +8,7 @@
 
 void load_config(char* filename, struct config* conf)
 {
-	//struct config conf = *configuration;
-	conf->_blacklist = create_node("n");
+	conf->_blacklist = create_node("n"); //create first node n to split tree into two parts
 	FILE* file = fopen(filename, "r");
 	if(file == NULL)
 	{
@@ -22,7 +21,7 @@ void load_config(char* filename, struct config* conf)
 	{
 		if(buff[0] != '#' && strlen(buff)-1 > 0)
 		{
-			buff[strlen(buff)-1] = '\0';
+			buff[strlen(buff)-1] = '\0'; // replace '\n' to '\0'
 			switch(config_length)
 			{
 				case 2: //master dns
@@ -36,7 +35,8 @@ void load_config(char* filename, struct config* conf)
 					}
 					else
 					{
-						strncpy(conf->_blacklistresponse, buff, MAX_ADDRLEN);
+						//load ip's numbers to structure
+						sscanf(buff,"%d.%d.%d.%d", &(conf->_blacklistresponse[0]), &(conf->_blacklistresponse[1]), &(conf->_blacklistresponse[2]), &(conf->_blacklistresponse[3]));
 					}
 					--config_length;
 					break;
@@ -46,6 +46,5 @@ void load_config(char* filename, struct config* conf)
 		}
 	}
 	conf->_status = 0;
-	//print_tree(conf->_blacklist);
 	fclose(file);
 }

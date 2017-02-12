@@ -1,3 +1,9 @@
+/*
+ * Developed by Andrew Gomenyuk <platinium9889@gmail.com>
+ * https://github.com/renair
+ * Uncomment test fileds to see raw data dumps.
+ */
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -11,7 +17,7 @@
 #define BUFFLEN 512
 #define PORT 53
 
-
+int get_server_response(const char* master, unsigned char* buff, int* data_len);
 
 int main(int argc, char** argv)
 {
@@ -24,16 +30,16 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 	printf("Master dns: %s\n",configuration._masterdns);
-	printf("Blacklist response: %s\n", configuration._blacklistresponse);
+	printf("Blacklist response: %s\n", configuration._blacklistresponse[0] == 0 ? "noaddr" : configuration._blacklistresponse);
 	printf("Blacklist:\n");
 	print_tree(configuration._blacklist);
-	//creating sockets
+	//creating server socket
 	struct sockaddr_in bind_addr;
 	struct sockaddr_in client_addr;
 	int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if(sock == -1)
 	{
-		printf("(%d)Socket opening error!\n",sock);
+		printf("Socket opening error!\n");
 		exit(1);
 	}
 	memset((void*)&bind_addr, 0, sizeof(bind_addr));
@@ -46,7 +52,7 @@ int main(int argc, char** argv)
 		printf("Can't bind socket to %d port.\n",PORT);
 		exit(1);
 	}
-	char buff[BUFFLEN];
+	unsigned char buff[BUFFLEN];
 	memset(buff, 0, BUFFLEN);
 	while(1)
 	{
@@ -74,42 +80,56 @@ int main(int argc, char** argv)
 			}
 			addr[addr_len++] = buff[i];
 		}
+		if(addr_len >= 50)
+		{
+			printf("Address to long too long.\n\n");
+			continue;
+		}
 		if(is_exist(configuration._blacklist, addr))
 		{
-			printf("%s is blocked!\n\n",addr);
+			printf("%s is blocked!\n",addr);
+			if(configuration._blacklistresponse[0] == '\0')
+			{
+				buff[2] |= 1<<7; //set answer bit
+				buff[3] |= 3; //set address not found
+				int sent_len = sendto(sock, buff, data_len, 0, (struct sockaddr*)&client_addr, client_len);
+				printf("Sent bytes as noaddr: %d\n\n",sent_len);
+			}
+			else
+			{
+				//TODO create raw packet. Do NOT copy income
+				int fake_len = data_len + 10;
+				unsigned char fake_response[fake_len];
+				memset(fake_response, 0, fake_len);
+				memcpy(fake_response, buff, data_len); //copy income packet
+				memcpy(fake_response+fake_len-4,configuration._blacklistresponse,4); //copy ip to last 4 bytes
+				fake_response[2] = 129; //set flags
+				fake_response[3] = 128; //set flags
+				fake_response[5] = 0;	//set amount of questions to 0
+				fake_response[7] = 1;   //set amount of answers to 1
+				fake_response[9] = 0;	//set amount of authority records to 0
+				fake_response[11] = 0;	//set amount of additional records to 0
+				fake_response[data_len+5] = 4; //set length of response data
+//test field
+				for(int i = 0; i < fake_len;++i)
+				{
+					printf("%x ",fake_response[i]);
+				}
+				printf("\n");
+//end test field
+				int sent_len = sendto(sock, fake_response, fake_len, 0, (struct sockaddr*)&client_addr, client_len);
+				printf("Sent bytes for fake addr: %d\n\n",sent_len);
+			}
 			continue;
 		}
 		else
 		{
 			printf("%s is allowed\n",addr);
 		}
-		//connect to server and send client's query
-		int google = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-		if(google == -1)
+		if(!get_server_response(configuration._masterdns, buff, &data_len))
 		{
-			printf("Can't create connection to connect to master DNS.\n");
 			continue;
 		}
-		struct sockaddr_in google_addr;
-		google_addr.sin_family = AF_INET;
-		google_addr.sin_port = htons(PORT);
-		if(inet_aton(configuration._masterdns, &google_addr.sin_addr) == 0)
-		{
-			printf("Cant transfer addres to long.\n");
-			close(google);
-			continue;
-		}
-		sendto(google, buff, data_len, 0, (struct sockaddr*)&google_addr, sizeof(google_addr));
-		printf("Data sent to master DNS.\n");
-		data_len = recv(google, buff, BUFFLEN, 0);
-		printf("Master DNS response length: %d\n", data_len);
-//test field
-
-
-
-
-//end test field
-		close(google);
 		//send response to client
 		int sent_bytes = sendto(sock, buff, data_len, 0, (struct sockaddr*)&client_addr, client_len);
 		if(data_len == sent_bytes)
@@ -139,4 +159,55 @@ int main(int argc, char** argv)
 	}
 	close(sock);
 	return 0;
+}
+
+int get_server_response(const char* master, unsigned char* buff, int* data_len)
+{
+	//connect to server and send client's query
+	int google = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if(google == -1)
+	{
+		printf("Can't create connection to connect to master DNS.\n");
+		return 0;
+	}
+	struct sockaddr_in google_addr;
+	google_addr.sin_family = AF_INET;
+	google_addr.sin_port = htons(PORT);
+	if(inet_aton(master, &google_addr.sin_addr) == 0)
+	{
+		printf("Cant transfer addres to long.\n");
+		close(google);
+		return 0;
+	}
+//test field
+//	printf("Data from client:\n");
+//	for(int i = 0; i < *data_len;++i)
+//	{
+//		if(buff[i] > 32 && buff[i] < 127)
+//		{
+//			printf("%4c ",buff[i]);
+//			continue;
+//		}
+//		printf("%4d ", buff[i]);
+//	}
+//	printf("\n");
+//end test field
+	sendto(google, buff, *data_len, 0, (struct sockaddr*)&google_addr, sizeof(google_addr));
+	printf("Data sent to master DNS.\n");
+	*data_len = recv(google, buff, BUFFLEN, 0);
+	printf("Master DNS response length: %d\n", *data_len);
+//test field
+//	printf("Data from server:\n");
+//	for(int i = 0; i < *data_len;++i)
+//	{
+//		if(buff[i] > 32 && buff[i] < 127)
+//		{
+//			printf("%4c ",buff[i]);
+//			continue;
+//		}
+//		printf("%4d ", buff[i]);
+//	}
+//end test field
+	close(google);
+	return 1;
 }
