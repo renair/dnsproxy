@@ -97,11 +97,10 @@ int main(int argc, char** argv)
 			}
 			else
 			{
-				//TODO create raw packet. Do NOT copy income
-				int fake_len = data_len + 10;
+				int fake_len = 12 + addr_len + 6 + 10;
 				unsigned char fake_response[fake_len];
 				memset(fake_response, 0, fake_len);
-				memcpy(fake_response, buff, data_len); //copy income packet
+				memcpy(fake_response, buff, 12 + addr_len + 6); //copy income packet
 				memcpy(fake_response+fake_len-4,configuration._blacklistresponse,4); //copy ip to last 4 bytes
 				fake_response[2] = 129; //set flags
 				fake_response[3] = 128; //set flags
@@ -109,11 +108,11 @@ int main(int argc, char** argv)
 				fake_response[7] = 1;   //set amount of answers to 1
 				fake_response[9] = 0;	//set amount of authority records to 0
 				fake_response[11] = 0;	//set amount of additional records to 0
-				fake_response[data_len+5] = 4; //set length of response data
+				fake_response[fake_len-5] = 4; //set length of response data
 //test field
 				for(int i = 0; i < fake_len;++i)
 				{
-					printf("%x ",fake_response[i]);
+					printf("%02x ",fake_response[i]);
 				}
 				printf("\n");
 //end test field
